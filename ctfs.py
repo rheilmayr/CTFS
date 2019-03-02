@@ -11,8 +11,9 @@ import os
 # =============================================================================
 # Identify local path for data directory
 # =============================================================================
-wdir = os.path.join(os.path.dirname(__file__), 'data/')
-files = glob.glob(wdir+'*.xlsx')
+wdir = os.path.dirname(__file__)    
+gfw_dir = os.path.join(wdir, 'gfw_data/')
+files = glob.glob(gfw_dir+'*.xlsx')
 
 # =============================================================================
 # Load and aggregate Hansen deforestation data
@@ -45,16 +46,23 @@ bl_reduction = [0.9, 0.87, 0.84, 0.81, 0.78, 0.75, 0.72]
 df['baseline'] = df['reference'] * np.sum(bl_reduction)
 
 # =============================================================================
-# Contrast baseline to actual performance
+# Calculate results
 # =============================================================================
+# Contrast baseline to performance
 df['performance'] = df[list(range(2011,2018))].sum(axis = 1)
-df['credits'] = df['baseline'] - df['performance']
-credit_df = df.loc[df['credits']>0]
+df['credits_ha'] = df['baseline'] - df['performance']
 #credit_df = credit_df.loc[['PER', 'COL', 'IDN', 'NGA', 'MEX', 'ECU', 'CIV']]
 
+# Add carbon data
+c_df = pd.read_csv(wdir + '/other_data/carbon.csv', index_col = 0)
+df = df.reset_index()
+df = df.merge(c_df, left_on = 'level_0', right_index = True, how = 'left')
+df = df.set_index(['level_0', 'All areas are in hectares'])
+df['credits_c'] = df['credits_ha'] * df['carbon']
+
 # Subset to states with non-additional credits
-area_credited = credit_df['credits'].sum() # ha
-c_credited = area_credited * 150 /1000000 # MMtCe assuming 250 t C / ha - http://www.ipcc.ch/ipccreports/sres/land_use/index.php?idp=151
+credit_df = df.loc[df['credits_c']>0]
+c_credited = credit_df['credits_c'].sum() / 1000000 # MMtCe
 co2_credited = c_credited * 44/12 # MMtCO2e
 credit_value = co2_credited * 14.61 / 1000 # Billion USD
 
@@ -67,6 +75,6 @@ redd_share = co2_credited / offsets
 # Print results
 # =============================================================================
 print("Total non-additional credits (MMtCO2e): " + str(round(co2_credited, 2)))
-print("Total value of credits (USD): " + str(round(credit_value, 2)))
+print("Total value of credits (billion USD): " + str(round(credit_value, 2)))
 print("Annual non-additional allowances as share of offset cap: " + \
       str(round(redd_share, 2)))
